@@ -51,10 +51,11 @@ local CONFIG = {
             Default = false,
         },
         {
-            Name    = "纸.海上100天",
+            Name    = "纸.吃光超市里的所有食物",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/%E7%BA%B8.%E6%B5%B7%E4%B8%8A100%E5%A4%A9",
+            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/纸.吃光超市里的所有食物",
             Default = false,
+    },
     },
 }
 
