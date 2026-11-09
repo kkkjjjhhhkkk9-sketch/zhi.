@@ -1,4 +1,111 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+local Player = Players.LocalPlayer
+
+local Config = {
+    FPSCheckInterval = 2,
+    CleanupInterval = 30,
+    MaxConnections = 100,
+    LowGraphics = false,
+    DisableUnnecessaryEffects = false
+}
+
+local Running = true
+local Connections = {}
+local LastFPS = 0
+local Stats = {
+    StartedAt = os.clock(),
+    FPS = 0,
+    Cleanups = 0
+}
+
+local function Connect(signal, callback)
+    if not Running then return end
+
+    local connection = signal:Connect(callback)
+    table.insert(Connections, connection)
+    return connection
+end
+
+local function CleanupConnections()
+    for i = #Connections, 1, -1 do
+        local connection = Connections[i]
+
+        if not connection.Connected then
+            table.remove(Connections, i)
+        end
+    end
+
+    Stats.Cleanups += 1
+end
+
+local function LowGraphics()
+    if not Config.LowGraphics then return end
+
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("PostEffect") then
+            obj.Enabled = false
+        end
+    end
+
+    Lighting.GlobalShadows = false
+end
+
+local function StartMonitor()
+    task.spawn(function()
+        while Running do
+            local start = os.clock()
+            local frames = 0
+
+            while os.clock() - start < Config.FPSCheckInterval do
+                RunService.RenderStepped:Wait()
+                frames += 1
+            end
+
+            Stats.FPS = math.floor(frames / Config.FPSCheckInterval)
+            LastFPS = Stats.FPS
+        end
+    end)
+end
+
+local function StartCleanup()
+    task.spawn(function()
+        while Running do
+            task.wait(Config.CleanupInterval)
+
+            if Running then
+                CleanupConnections()
+            end
+        end
+    end)
+end
+
+local function Stop()
+    Running = false
+
+    for _, connection in ipairs(Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    table.clear(Connections)
+end
+
+LowGraphics()
+StartMonitor()
+StartCleanup()
+
+_G.LuraphOptimizerV2 = {
+    Stop = Stop,
+    Stats = Stats,
+    Config = Config
+}
+
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
