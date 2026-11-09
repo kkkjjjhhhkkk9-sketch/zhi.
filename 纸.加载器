@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 local gui
@@ -9,11 +10,16 @@ local CONFIG = {
     Subtitle = "选择要加载的脚本",
     Version  = "v1.5",
     Width    = 340,
+    UIScale  = 0.72,
 
     Demo = false,
 
-    LogoURL  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8logo.jpg",
-    LogoFile = "zhi_paper_logo.jpg",
+    LogoBaseURL      = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/",
+    LogoExt          = ".jpg",
+    LogoFilePrefix   = "zhi_game_logo_",
+
+    LogoFallbackURL  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8logo.jpg",
+    LogoFallbackFile = "zhi_paper_logo.jpg",
 
     Accent  = Color3.fromRGB(91, 110, 245),
     Accent2 = Color3.fromRGB(139, 92, 246),
@@ -23,41 +29,43 @@ local CONFIG = {
         {
             Name    = "纸脚本 v2",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/%E7%BA%B8%E8%84%9A%E6%9C%AC.v2",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8%E8%84%9A%E6%9C%AC.v2",
             Default = true,
         },
         {
             Name    = "纸.监狱人生",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/main/%E7%BA%B8.%E7%9B%91%E7%8B%B1%E4%BA%BA%E7%94%9F",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8.%E7%9B%91%E7%8B%B1%E4%BA%BA%E7%94%9F",
             Default = false,
         },
         {
             Name    = "纸.拾取树叶",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/%E7%BA%B8.%E6%8B%BE%E5%8F%96%E6%A0%91%E5%8F%B6",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8.%E6%8B%BE%E5%8F%96%E6%89%80%E6%9C%89%E6%A0%91%E5%8F%B6",
             Default = false,
         },
         {
             Name    = "纸.重型钓鱼",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/%E7%BA%B8.%E9%87%8D%E5%9E%8B%E9%92%93%E9%B1%BC",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8.%E9%87%8D%E5%9E%8B%E9%92%93%E9%B1%BC",
             Default = false,
         },
         {
             Name    = "纸.海上100天",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/%E7%BA%B8.%E6%B5%B7%E4%B8%8A100%E5%A4%A9",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8.%E6%B5%B7%E4%B8%8A100%E5%A4%A9",
             Default = false,
         },
         {
             Name    = "纸.吃光超市里的所有食物",
             Kind    = "url",
-            Source  = "https://raw.githubusercontent.com/zhifeijiyutggddfbe/zhisp/refs/heads/main/纸.吃光超市里的所有食物",
+            Source  = "https://raw.githubusercontent.com/kkkjjjhhhkkk9-sketch/zhi./refs/heads/main/%E7%BA%B8.%E5%90%83%E5%85%89%E8%B6%85%E5%B8%82%E9%87%8C%E7%9A%84%E6%89%80%E6%9C%89%E9%A3%9F%E7%89%A9",
             Default = false,
-    },
+        },
     },
 }
+
+local UI = CONFIG.UIScale
 
 local C_TEXT   = Color3.fromRGB(24, 28, 38)
 local C_SUB    = Color3.fromRGB(110, 118, 138)
@@ -223,36 +231,62 @@ local function makeCard(name)
     return card
 end
 
-local function loadLogoAsset()
-    local url  = CONFIG.LogoURL
-    local file = CONFIG.LogoFile
-    if not url or not file then return nil end
+local function getGameName()
+    local ok, info = pcall(function()
+        return MarketplaceService:GetProductInfo(game.PlaceId, Enum.InfoType.Asset)
+    end)
+    if ok and type(info) == "table" and info.Name and info.Name ~= "" then
+        return info.Name
+    end
+    return game.Name or "Unknown"
+end
 
+local function urlEncode(str)
+    return (str:gsub("([^%w%-%_%.%!%~%*%'%(%)])", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
+local function loadLogoAsset()
     local getCustom = getcustomasset or getsynasset
     if type(getCustom) ~= "function" then return nil end
     if type(writefile) ~= "function" then return nil end
 
-    local fileExists = false
-    if type(isfile) == "function" then
-        local okI, exists = pcall(isfile, file)
-        fileExists = (okI and exists) and true or false
-    end
+    local function tryFetch(url, file)
+        local exists = false
+        if type(isfile) == "function" then
+            local okI, v = pcall(isfile, file)
+            exists = (okI and v) and true or false
+        end
 
-    if not fileExists then
-        local okD = pcall(function()
-            local content = game:HttpGet(url)
-            if type(content) ~= "string" or #content < 100 then
-                error("下载失败或内容为空")
+        if not exists then
+            local okD, body = pcall(function() return game:HttpGet(url) end)
+            if not okD or type(body) ~= "string" or #body < 100 then
+                return nil
             end
-            writefile(file, content)
-        end)
-        if not okD then return nil end
+            if body:sub(1, 1) == "<" then return nil end
+            local okW = pcall(writefile, file, body)
+            if not okW then return nil end
+        end
+
+        local okG, asset = pcall(getCustom, file)
+        if okG and type(asset) == "string" and asset ~= "" then
+            return asset
+        end
+        return nil
     end
 
-    local okG, asset = pcall(getCustom, file)
-    if okG and type(asset) == "string" and asset ~= "" then
-        return asset
+    local gameName = getGameName()
+    local gameURL  = CONFIG.LogoBaseURL .. urlEncode(gameName) .. CONFIG.LogoExt
+    local gameFile = CONFIG.LogoFilePrefix .. tostring(game.PlaceId) .. CONFIG.LogoExt
+
+    local asset = tryFetch(gameURL, gameFile)
+    if asset then return asset end
+
+    if CONFIG.LogoFallbackURL and CONFIG.LogoFallbackFile then
+        return tryFetch(CONFIG.LogoFallbackURL, CONFIG.LogoFallbackFile)
     end
+
     return nil
 end
 
@@ -347,14 +381,20 @@ local function executeItem(item)
         if type(body) ~= "string" or body == "" then
             return false, "下载内容为空"
         end
+        if body:sub(1, 1) == "<" then
+            return false, "返回内容为 HTML（404 或路径不对）"
+        end
         local fn, compileErr = loadstring(body)
         if not fn then
             return false, "编译失败：" .. tostring(compileErr)
         end
-        local ok2, runErr = pcall(fn)
-        if not ok2 then
-            return false, "运行出错：" .. tostring(runErr)
-        end
+
+        task.spawn(function()
+            local ok2, runErr = pcall(fn)
+            if not ok2 then
+                warn(("[纸脚本加载器] 运行出错：%s"):format(tostring(runErr)))
+            end
+        end)
         return true
     elseif kind == "module" then
         local resolved, err = resolveModulePath(src)
@@ -773,8 +813,6 @@ startBtn.MouseButton1Up:Connect(function()
     }):Play()
 end)
 
-card1.Visible = true
-
 local card2 = makeCard("Card_Result")
 
 local resultLogoRow = Instance.new("Frame")
@@ -919,7 +957,7 @@ local function switchCard(fromCard, toCard)
     local fromScale = fromCard:FindFirstChildOfClass("UIScale")
     if fromScale then
         TweenService:Create(fromScale, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Scale = 0.88,
+            Scale = 0.88 * UI,
         }):Play()
     end
     TweenService:Create(fromCard, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
@@ -935,13 +973,13 @@ local function switchCard(fromCard, toCard)
 
         local toScale = Instance.new("UIScale")
         toScale.Parent = toCard
-        toScale.Scale = 0.85
+        toScale.Scale = 0.85 * UI
         toCard.Position = UDim2.new(0.5, 0, 0.5, 40)
 
         burstRing()
 
         TweenService:Create(toScale, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Scale = 1,
+            Scale = UI,
         }):Play()
         TweenService:Create(toCard, TweenInfo.new(0.7, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
             Position = UDim2.fromScale(0.5, 0.5),
@@ -1047,7 +1085,7 @@ end)
 closeBtn.MouseButton1Click:Connect(function()
     local s = card2:FindFirstChildOfClass("UIScale")
     if s then
-        TweenService:Create(s, TweenInfo.new(0.3), { Scale = 0.85 }):Play()
+        TweenService:Create(s, TweenInfo.new(0.3), { Scale = 0.85 * UI }):Play()
     end
     TweenService:Create(card2, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
         Position = UDim2.new(0.5, 0, 0.5, 40),
@@ -1061,14 +1099,15 @@ end)
 
 local card1Scale = Instance.new("UIScale")
 card1Scale.Parent = card1
-card1Scale.Scale = 0.85
+card1Scale.Scale = 0.85 * UI
 card1.Position = UDim2.new(0.5, 0, 0.5, 40)
+card1.Visible = true
 
 task.spawn(function()
     task.wait(0.12)
     burstRing()
     TweenService:Create(card1Scale, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Scale = 1,
+        Scale = UI,
     }):Play()
     TweenService:Create(card1, TweenInfo.new(0.7, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
         Position = UDim2.fromScale(0.5, 0.5),
